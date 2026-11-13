@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>동네 맛집 순위</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Do+Hyeon&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <p class="hero__mark">동네맛집</p>
+      <h1 class="hero__title">오늘은<br>어느 동네에서<br>먹을까요</h1>
+      <p class="hero__lede">지역을 고르면 블로그 리뷰를 읽고 갈 만한 식당을 순위로 정리합니다.</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <form id="search-form" class="card picker" novalidate>
+      <div class="picker__row">
+        <label class="field">
+          <span class="field__label">시/도</span>
+          <select id="sido" name="sido"><option value="">시/도 선택</option></select>
+        </label>
+        <label class="field">
+          <span class="field__label">시/군/구</span>
+          <select id="sigungu" name="sigungu" disabled><option value="">시/도를 먼저 고르세요</option></select>
+        </label>
+      </div>
+      <label class="field">
+        <span class="field__label">동네나 역 이름 (선택)</span>
+        <input id="detail" name="detail" type="text" maxlength="30" placeholder="예: 성수동, 강남역" autocomplete="off">
+      </label>
+
+      <fieldset class="kinds">
+        <legend class="field__label">음식 종류</legend>
+        <div class="kinds__grid" id="categories"></div>
+      </fieldset>
+
+      <div class="picker__actions">
+        <label class="field field--inline">
+          <span class="field__label">추천 개수</span>
+          <select id="limit" name="limit"></select>
+        </label>
+        <button type="submit" class="btn btn--primary btn--lg" id="go">맛집 찾기</button>
+      </div>
+    </form>
+
+    <section class="hotspots" aria-labelledby="hotspots-label">
+      <h2 class="hotspots__label" id="hotspots-label">자주 찾는 동네</h2>
+      <ul class="hotspots__list" id="hotspots"></ul>
+    </section>
+
+    <p class="banner" id="banner" hidden></p>
+
+    <section class="card setup" id="setup" aria-labelledby="setup-title" hidden>
+      <h2 id="setup-title">네이버 검색 API 키를 연결하세요</h2>
+      <p>식당과 블로그 리뷰를 네이버 검색 API로 찾아옵니다. 키를 한 번만 등록하면 됩니다.</p>
+      <ol class="steps">
+        <li><a href="https://console.ncloud.com/" target="_blank" rel="noopener noreferrer">네이버 클라우드 플랫폼 콘솔</a>에 로그인합니다. 처음이라면 회원가입이 필요합니다.</li>
+        <li>Services에서 Application Services 아래의 NAVER API HUB를 열고, Application 메뉴에서 ‘Application 등록’을 누릅니다. API 카드 가운데 ‘블로그’와 ‘지역’ 두 개를 체크하고, 영문 이름을 붙여 만듭니다.</li>
+        <li>만든 Application의 ‘인증 정보’에서 Client ID와 Client Secret을 복사해 아래에 붙여 넣습니다.</li>
+      </ol>
+      <p class="note">예전에 네이버 개발자센터에서 받은 검색 API 키가 있다면 그대로 넣어도 됩니다. 어느 쪽 키인지는 자동으로 알아냅니다. 개발자센터 키는 2027년 6월 30일까지만 쓸 수 있습니다.</p>
+      <form id="setup-form" class="setup__form">
+        <label class="field">
+          <span class="field__label">Client ID</span>
+          <input id="client-id" type="text" autocomplete="off" spellcheck="false" required>
+        </label>
+        <label class="field">
+          <span class="field__label">Client Secret</span>
+          <input id="client-secret" type="password" autocomplete="off" required>
+        </label>
+        <button type="submit" class="btn btn--primary" id="save-keys">키 저장</button>
+      </form>
+      <p class="setup__msg" id="setup-msg" role="alert"></p>
+      <p class="note">키는 이 컴퓨터의 .env 파일에만 저장됩니다.</p>
+      <button type="button" class="linklike" id="close-setup" hidden>닫기</button>
+    </section>
+
+    <section class="card guide" id="guide">
+      <h2>이렇게 순위를 매깁니다</h2>
+      <ol class="steps">
+        <li>고른 지역의 식당을 음식 종류별로 검색해 후보를 모읍니다.</li>
+        <li>후보마다 블로그 리뷰를 30개까지 읽고, ‘내돈내산’ 글과 ‘제공받아’ 쓴 글이 각각 얼마나 되는지 셉니다.</li>
+        <li>리뷰의 양, 내돈내산 비율, 글의 표현, 최근 반응으로 점수를 매겨 높은 순으로 보여 줍니다.</li>
+      </ol>
+    </section>
+
+    <section class="card notice" id="notice" hidden>
+      <h2 id="notice-title"></h2>
+      <p id="notice-body"></p>
+    </section>
+
+    <section class="results" id="results" aria-labelledby="results-title" hidden>
+      <header class="results__head">
+        <h2 id="results-title"></h2>
+        <p id="results-sub"></p>
+      </header>
+      <ol class="places" id="list"></ol>
+      <p class="note">점수는 블로그 글의 양과 표현으로 계산한 참고용 숫자입니다. 영업시간과 휴무일은 지도에서 확인하세요.</p>
+    </section>
+
+    <footer class="foot">
+      <button type="button" class="linklike" id="open-setup">네이버 API 키 다시 입력</button>
+    </footer>
+  </main>
+
+  <div class="toast" id="toast" data-show="false">
+    <p class="toast__text" id="status" role="status" aria-live="polite"></p>
+    <div class="toast__track" id="progress" hidden><div class="toast__bar" id="progress-bar"></div></div>
+  </div>
+
+  <!-- 아이콘 선을 살짝 떨리게 해서 손으로 그린 느낌을 낸다 -->
+  <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+    <filter id="sketch" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="2" seed="7" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.2" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="sketch2" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="23" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.6" xChannelSelector="G" yChannelSelector="R"/>
+    </filter>
+  </svg>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

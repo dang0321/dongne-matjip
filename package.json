@@ -1,0 +1,19 @@
+{
+  "name": "dongne-matjip",
+  "version": "0.1.0",
+  "private": true,
+  "description": "지역을 고르면 블로그 리뷰를 분석해 맛집 순위를 뽑아 주는 로컬 웹앱",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "build:exe": "node build/build.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "postject": "^1.0.0-alpha.6"
+  }
+}
