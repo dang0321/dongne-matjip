@@ -1,5 +1,5 @@
 import { KIND_ICONS } from './icons.js';
-import { rank } from './lib/rank.js';
+import { rank, readReviewItem } from './lib/rank.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -128,18 +128,60 @@ function setBusy(busy) {
 }
 
 /** 서버에 묻는다. 실패하면 kind(오류 종류)가 붙은 Error를 던진다. */
-async function api(url) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function apiOnce(url) {
   let response;
   try {
     response = await fetch(url);
   } catch {
-    throw Object.assign(new Error('서버와 연결이 끊겼습니다. 잠시 뒤 다시 찾아보세요.'), { kind: 'connection' });
+    throw Object.assign(new Error('서버와 연결이 끊겼습니다. 잠시 뒤 다시 찾아보세요.'), {
+      kind: 'connection',
+      retryable: true,
+    });
   }
-  const data = await response.json().catch(() => ({}));
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    // 우리 서버가 아니라 호스팅 쪽이 낸 오류 페이지(예: 처리 시간 초과)는 JSON이 아니다
+  }
+  if (!data) {
+    throw Object.assign(new Error('서버가 잠시 응답하지 못했습니다. 다시 찾아보세요.'), { kind: 'server', retryable: true });
+  }
   if (!response.ok) {
-    throw Object.assign(new Error(data.message || '요청을 처리하지 못했습니다.'), { kind: data.kind ?? 'server' });
+    throw Object.assign(new Error(data.message || '요청을 처리하지 못했습니다.'), {
+      kind: data.kind ?? 'server',
+      retryable: data.kind === 'server' || data.kind === 'upstream' || data.kind === 'network',
+    });
   }
   return data;
+}
+
+/** 서버에 묻는다. 일시적인 실패는 두 번까지 다시 묻고, 그래도 안 되면 kind(오류 종류)가 붙은 Error를 던진다. */
+async function api(url, retries = 2) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await apiOnce(url);
+    } catch (error) {
+      if (!error.retryable || attempt >= retries) throw error;
+      await sleep(800 * (attempt + 1));
+    }
+  }
+}
+
+/** 작업들을 한 번에 limit개까지만 동시에 돌린다. 결과는 원래 순서대로. */
+async function runPool(count, limit, task) {
+  const results = new Array(count);
+  let next = 0;
+  const worker = async () => {
+    while (next < count) {
+      const index = next++;
+      results[index] = await task(index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, count) }, worker));
+  return results;
 }
 
 function showProgress(share, text) {
@@ -175,19 +217,21 @@ async function search() {
     const batches = Math.ceil(found.places.length / found.batchSize);
     let done = 0;
     showProgress(0.4, `블로그 리뷰를 읽는 중 (0/${found.places.length})`);
-    const parts = await Promise.all(
-      Array.from({ length: batches }, async (_, batch) => {
-        const part = await api(`/api/reviews?${params}&batch=${batch}`);
-        done += part.items.length;
-        if (turn === searchTurn) {
-          showProgress(0.4 + 0.6 * (done / found.places.length), `블로그 리뷰를 읽는 중 (${done}/${found.places.length})`);
-        }
-        return part;
-      }),
-    );
+    // 묶음을 한꺼번에 다 보내면 네이버의 초당 호출 한도에 걸리기 쉬워서 3개씩만 동시에 보낸다
+    const parts = await runPool(batches, 3, async (batch) => {
+      const part = await api(`/api/reviews?${params}&batch=${batch}`);
+      done += part.items.length;
+      if (turn === searchTurn) {
+        showProgress(0.4 + 0.6 * (done / found.places.length), `블로그 리뷰를 읽는 중 (${done}/${found.places.length})`);
+      }
+      return part;
+    });
     if (turn !== searchTurn) return;
 
-    const reviews = parts.sort((a, b) => a.batch - b.batch).flatMap((part) => part.items);
+    const reviews = parts
+      .sort((a, b) => a.batch - b.batch)
+      .flatMap((part) => part.items)
+      .map(readReviewItem);
     const ranked = rank(found.places, reviews);
     renderResults({
       area: found.area,

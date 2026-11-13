@@ -1,4 +1,16 @@
+import { readBlogResponse } from './naver-data.js';
 import { analyzePosts, buildReasons, organicReviews, scorePlace } from './scoring.js';
+
+/** 서버가 그대로 넘겨준 네이버 응답 세 개(/api/reviews의 items 한 칸)를 점수 계산용 모양으로 푼다. */
+export function readReviewItem(item) {
+  const blog = readBlogResponse(item?.blog);
+  return {
+    total: blog.total,
+    posts: blog.posts,
+    provided: Number(item?.provided?.total) || 0,
+    own: Number(item?.own?.total) || 0,
+  };
+}
 
 /**
  * 서버에서 받은 후보(places)와 리뷰(reviews, 같은 순서)를 읽어 점수순 목록을 만든다.

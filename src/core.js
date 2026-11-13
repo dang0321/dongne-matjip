@@ -4,7 +4,7 @@
  *
  * 검색은 요청 여러 번으로 나뉜다(진행 상황을 단계별로 보여 주기 위해서다):
  *   GET /api/discover            후보 식당 모으기
- *   GET /api/reviews?batch=N     후보 10곳씩 블로그 리뷰 가져오기
+ *   GET /api/reviews?batch=N     후보 5곳씩 블로그 리뷰 가져오기
  * 점수 계산은 브라우저가 한다(public/lib/rank.js).
  *
  * env가 주는 것:
@@ -14,7 +14,7 @@
  *   status()     { configured, provider, managed, notice }
  */
 import { NaverError } from './naver.js';
-import { BATCH_SIZE, discover, fetchReviews } from './recommend.js';
+import { BATCH_SIZE, discover, fetchReviewsText } from './recommend.js';
 import { AreaError, CATEGORIES, HOT_SPOTS, resolveArea, SIDO } from './regions.js';
 
 /**
@@ -72,7 +72,7 @@ async function handleReviews(query, env) {
 
   const client = await env.getClient();
   if (!client) return json(503, { kind: 'setup', message: '네이버 검색 API 키를 먼저 연결하세요.' });
-  const text = JSON.stringify({ batch, items: await fetchReviews({ client, reviewArea, places: slice }) });
+  const text = await fetchReviewsText({ client, reviewArea, places: slice, batch });
   await env.cache.put(`r:${key}|${batch}`, text, CACHE_TTL_SECONDS);
   return rawJson(text);
 }

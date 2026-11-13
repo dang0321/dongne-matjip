@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { createMockNaver, LEGACY_TEST_KEYS, listen, TEST_KEYS } from '../dev/mock-naver.js';
-import { rank } from '../public/lib/rank.js';
+import { rank, readReviewItem } from '../public/lib/rank.js';
 import { createApp, parseEnv } from '../server.js';
 
 let mock;
@@ -55,7 +55,7 @@ async function search(base, params) {
     if (part.status !== 200) return { failure: part };
     parts.push(part.body);
   }
-  const reviews = parts.flatMap((part) => part.items);
+  const reviews = parts.flatMap((part) => part.items).map(readReviewItem);
   return { found: found.body, reviews, ...rank(found.body.places, reviews) };
 }
 
@@ -77,7 +77,7 @@ test('지역을 고르면 후보와 리뷰를 주고, 그것으로 점수순 목
   const { found, reviews, places, postsRead } = await search(base, params);
 
   assert.equal(found.area, '서울 성동구 성수동');
-  assert.equal(found.batchSize, 10);
+  assert.equal(found.batchSize, 5);
   assert.equal(reviews.length, found.places.length);
   assert.ok(postsRead > 100);
 
@@ -120,7 +120,7 @@ test('한 요청이 네이버를 50번 넘게 부르지 않고, 같은 검색은
 
   calls = 0;
   const first = await get(`${base}/api/reviews?${query}&batch=0`);
-  assert.equal(first.body.items.length, 10);
+  assert.equal(first.body.items.length, 5);
   assert.ok(calls > 0 && calls <= 50, `리뷰 한 묶음 ${calls}회`);
 
   calls = 0;

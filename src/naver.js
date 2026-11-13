@@ -1,4 +1,5 @@
-﻿import { safeUrl, stripHtml } from '../public/lib/text.js';
+import { readBlogResponse } from '../public/lib/naver-data.js';
+import { safeUrl, stripHtml } from '../public/lib/text.js';
 
 /**
  * 네이버 검색 API를 받는 두 창구. 파라미터와 응답 모양은 같고 주소와 인증 헤더만 다르다.
@@ -128,7 +129,7 @@ export function createNaverClient({
   const limit = createLimiter(minIntervalMs ?? api.minIntervalMs, maxConcurrent ?? api.maxConcurrent);
   const headers = api.headers(clientId, clientSecret);
 
-  async function once(url) {
+  async function once(url, raw) {
     let response;
     try {
       response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
@@ -138,19 +139,26 @@ export function createNaverClient({
     if (!response.ok) {
       throw toError(response.status, await response.json().catch(() => ({})));
     }
+    const unreadable = () =>
+      new NaverError('네이버 검색 서버가 읽을 수 없는 응답을 보냈습니다.', { status: response.status });
+    if (raw) {
+      const text = await response.text().catch(() => '');
+      if (!text.trimStart().startsWith('{')) throw unreadable(); // 끝까지 풀어 보지 않고 모양만 확인한다
+      return text;
+    }
     try {
       return await response.json();
     } catch {
-      throw new NaverError('네이버 검색 서버가 읽을 수 없는 응답을 보냈습니다.', { status: response.status });
+      throw unreadable();
     }
   }
 
-  async function request(pathname, params) {
+  async function request(pathname, params, { raw = false } = {}) {
     const url = new URL(pathname, baseUrl);
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
     for (let attempt = 0; ; attempt += 1) {
       try {
-        return await limit(() => once(url));
+        return await limit(() => once(url, raw));
       } catch (error) {
         if (!RETRYABLE.has(error.kind) || attempt >= retries) throw error;
         await sleep(backoffMs * 2 ** attempt);
@@ -174,17 +182,16 @@ export function createNaverClient({
 
     /** 블로그 검색. total은 검색어에 걸린 전체 글 수. */
     async searchBlog(query, { display = 30, sort = 'sim' } = {}) {
-      const data = await request(api.paths.blog, { query, display, start: 1, sort });
-      return {
-        total: Number(data.total) || 0,
-        posts: (Array.isArray(data.items) ? data.items : []).map((item) => ({
-          title: stripHtml(item.title),
-          description: stripHtml(item.description),
-          link: safeUrl(item.link),
-          blogger: stripHtml(item.bloggername),
-          postdate: String(item.postdate ?? ''),
-        })),
-      };
+      return readBlogResponse(await request(api.paths.blog, { query, display, start: 1, sort }));
+    },
+
+    /**
+     * 블로그 검색 응답을 풀지 않고 JSON 문자열 그대로 돌려준다.
+     * 무료 Cloudflare Workers는 요청당 CPU 10ms까지라, 응답 30개를 서버에서 풀면 넘친다.
+     * 풀어서 다듬는 일은 받는 쪽(public/lib/naver-data.js)이 한다.
+     */
+    async searchBlogRaw(query, { display = 30, sort = 'sim' } = {}) {
+      return request(api.paths.blog, { query, display, start: 1, sort }, { raw: true });
     },
   };
 }
